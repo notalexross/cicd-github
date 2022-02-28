@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-action.json
+name: Run if present
+description: Run an NPM script if present in package.json
+inputs:
+  script:
+    description: NPM script
+    required: true
+  env:
+    description: Environment variables
+    required: false
+  warn:
+    description: Boolean string indicating whether to create a warning if script is not present
+    required: false
+    default: "true"
+outputs:
+  outcome:
+    description: Run outcome, i.e. success, failure, cancelled, or skipped
+    value: ${{ steps.run.outcome }}
+runs:
+  using: composite
+  steps:
+    - uses: notalexross/cicd-github/actions/require-inputs@main
+      with:
+        every: >
+          script ${{ toJSON(inputs.script) }}
+          warn ${{ toJSON(inputs.warn) }}
+    - id: get_script_name
+      shell: bash
+      run: |
+        script="${{ inputs.script }}"
+        name=${script%% *}
+        echo "::set-output name=name::${name}"
+    - id: check_if_present
+      shell: bash
+      run: |
+        if npm run | grep -qx "  ${{ steps.get_script_name.outputs.name }}"; then
+          echo "::set-output name=present::true"
+        else
+          echo "::set-output name=present::false"
+          if [[ "${{ inputs.warn }}" == true ]]; then
+            echo "::warning::Skipping missing script: \"${{ steps.get_script_name.outputs.name }}\"."
+          fi
+        fi
+    - id: run
+      if: ${{ steps.check_if_present.outputs.present == 'true' }}
+      shell: bash
+      run: |
+        set -o allexport
+        ${{ inputs.env }}
+        set +o allexport
+        npm run ${{ inputs.script }}

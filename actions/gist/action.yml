@@ -1,0 +1,72 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-action.json
+name: Gist
+description: Read/write from/to a GitHub gist
+inputs:
+  gist_token:
+    description: GitHub personal access token with gist scope
+    required: true
+  gist_id:
+    description: GitHub gist id
+    required: true
+  method:
+    description: GET/POST
+    required: true
+  filename:
+    description: Gist file name
+    required: true
+  content:
+    description: Gist file content (quotation marks must be triple escaped, i.e. \\\")
+    required: false
+outputs:
+  content:
+    description: Gist file content
+    value: ${{ steps.read.outputs.content || steps.write.outputs.content }}
+runs:
+  using: composite
+  steps:
+    - uses: notalexross/cicd-github/actions/require-inputs@main
+      with:
+        every: >
+          gist_token ${{ toJSON(inputs.gist_token) }}
+          gist_id ${{ toJSON(inputs.gist_id) }}
+          filename ${{ toJSON(inputs.filename) }}
+          method ${{ toJSON(inputs.method) }}
+    - shell: bash
+      run: |
+        if [[ "${{ inputs.method }}" != GET && "${{ inputs.method }}" != POST ]]; then
+          echo "::error::method must be one of: GET, POST."
+          exit 11
+        fi
+        if [[ "${{ inputs.method }}" == POST && ${{ toJSON(inputs.content) }} == "" ]]; then
+          echo "::error::Must specify content when method is \"POST\"."
+          exit 11
+        fi
+        if [[ "${{ inputs.method }}" == GET && ${{ toJSON(inputs.content) }} ]]; then
+          echo "::error::content is incompatible with method GET."
+          exit 11
+        fi
+    - id: read
+      if: ${{ inputs.method == 'GET' }}
+      shell: bash
+      run: |
+        content=$(gh gist view ${{ inputs.gist_id }} -f ${{ inputs.filename }} -r || true)
+        echo "::set-output name=content::$content"
+      env:
+        GITHUB_TOKEN: ${{ inputs.gist_token }}
+    - id: mkdir
+      if: ${{ inputs.method == 'POST' }}
+      shell: bash
+      run: mkdir .gist
+    - id: write
+      if: ${{ inputs.method == 'POST' }}
+      shell: bash
+      run: |
+        content=${{ toJSON(inputs.content) }}
+        echo $content > .gist/${{ inputs.filename }}
+        gh gist edit ${{ inputs.gist_id }} -a .gist/${{ inputs.filename }}
+        echo "::set-output name=content::$content"
+      env:
+        GITHUB_TOKEN: ${{ inputs.gist_token }}
+    - if: ${{ always() && steps.mkdir.outcome == 'success' }}
+      shell: bash
+      run: rm -r .gist

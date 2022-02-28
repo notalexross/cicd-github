@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-action.json
+name: Netlify deploy
+description: Deploy to Netlify
+inputs:
+  netlify_token:
+    description: Netlify personal access token
+    required: true
+  site_id:
+    description: Site ID
+    required: true
+  gist_token:
+    description: GitHub personal access token with gist scope
+    required: true
+  gist_id:
+    description: GitHub gist id
+    required: true
+  artifact_name:
+    description: Name of artifact containing the build files for deployment
+    required: true
+  production:
+    description: Boolean string indicating whether to deploy to production
+    required: false
+    default: "true"
+  deploy_message:
+    description: Message to include in Netlify deploy log
+    required: false
+    default: Via GitHub Actions
+  hash_filename_format:
+    description: Gist filename format, ({N} represents repository ID (N=0) or branch name (N=1))
+    required: false
+    default: "{0}__{1}__hash.json"
+runs:
+  using: composite
+  steps:
+    - uses: notalexross/cicd-github/actions/require-inputs@main
+      with:
+        every: >
+          netlify_token ${{ toJSON(inputs.netlify_token) }}
+          site_id ${{ toJSON(inputs.site_id) }}
+          gist_token ${{ toJSON(inputs.gist_token) }}
+          gist_id ${{ toJSON(inputs.gist_id) }}
+          artifact_name ${{ toJSON(inputs.artifact_name) }}
+          production ${{ toJSON(inputs.production) }}
+          hash_filename_format ${{ toJSON(inputs.hash_filename_format) }}
+    - uses: actions/download-artifact@v2
+      with:
+        name: ${{ inputs.artifact_name }}
+        path: ./artifacts/build
+    - id: hash
+      shell: bash
+      run: |
+        hash=${{ hashFiles('./artifacts/build') }}
+        if [[ $hash == "" ]]; then
+          echo "::error::Artifact named \"${{ inputs.artifact_name }}\" does not exist."
+          exit 11
+        fi
+        echo "::set-output name=hash::$hash"
+    - id: deploy
+      shell: bash
+      run: |
+        npm i -g netlify-cli@9
+        netlify deploy \
+        --dir=./artifacts/build \
+        --message="${{ inputs.deploy_message }}" \
+        --timeout 600 \
+        $([[ "${{ inputs.production }}" == true ]] && echo --prod) \
+        > /dev/null
+      env:
+        NETLIFY_SITE_ID: ${{ inputs.site_id }}
+        NETLIFY_AUTH_TOKEN: ${{ inputs.netlify_token }}
+    - uses: notalexross/cicd-github/actions/gist@main
+      with:
+        gist_token: ${{ inputs.gist_token }}
+        gist_id: ${{ inputs.gist_id }}
+        method: POST
+        filename: ${{ format(inputs.hash_filename_format, github.event.repository.id, github.ref_name) }}
+        content: ${{ steps.hash.outputs.hash }}

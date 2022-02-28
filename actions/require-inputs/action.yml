@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-action.json
+name: Require inputs
+description: Enforce inputs are non-empty
+inputs:
+  every:
+    description: Pairs of input names and values for which EVERY value should be non-empty
+    required: false
+  some:
+    description: Pairs of input names and values for which SOME values should be non-empty
+    required: false
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      if: ${{ inputs.some }}
+      run: bash ${{ github.action_path }}/enforce.sh some ${{ inputs.some }}
+    - shell: bash
+      if: ${{ always() && inputs.every }}
+      run: bash ${{ github.action_path }}/enforce.sh every ${{ inputs.every }}

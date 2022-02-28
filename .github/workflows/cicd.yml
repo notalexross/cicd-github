@@ -1,0 +1,122 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CICD
+on:
+  workflow_call:
+    inputs:
+      # Note: If repository supplied, default hash_filename_format & badge_filename_format values will still use the calling repo ID and NOT the ID of the checked out repo.
+      repository:
+        type: string
+        required: false
+      build_path:
+        type: string
+        required: false
+        default: build
+      force_deploy:
+        type: boolean
+        required: false
+        default: false
+      production:
+        type: boolean
+        required: false
+        default: true
+      deploy_message:
+        type: string
+        required: false
+        default: Via GitHub Actions
+      hash_filename_format:
+        type: string
+        required: false
+        default: "{0}__{1}__hash.json"
+      badge_filename_format:
+        type: string
+        required: false
+        default: "{0}__{1}__{2}.json"
+    secrets:
+      GIST_AUTH_TOKEN:
+        required: true
+      BADGES_GIST_ID:
+        required: true
+      NETLIFY_AUTH_TOKEN:
+        required: true
+      NETLIFY_SITE_ID:
+        required: true
+      ENV:
+        required: false
+      REPO_AUTH_TOKEN:
+        required: false
+jobs:
+  validate_inputs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: notalexross/cicd-github/actions/require-inputs@main
+        with:
+          every: >
+            build_path ${{ toJSON(inputs.build_path) }}
+            hash_filename_format ${{ toJSON(inputs.hash_filename_format) }}
+            badge_filename_format ${{ toJSON(inputs.badge_filename_format) }}
+            production ${{ toJSON(inputs.production) }}
+            GIST_AUTH_TOKEN ${{ toJSON(secrets.GIST_AUTH_TOKEN) }}
+            BADGES_GIST_ID ${{ toJSON(secrets.BADGES_GIST_ID) }}
+            NETLIFY_AUTH_TOKEN ${{ toJSON(secrets.NETLIFY_AUTH_TOKEN) }}
+            NETLIFY_SITE_ID ${{ toJSON(secrets.NETLIFY_SITE_ID) }}
+      - run: |
+          if [[ "${{ inputs.repository }}" && "${{ secrets.REPO_AUTH_TOKEN }}" == "" ]]; then
+            echo "::error::Must specify REPO_AUTH_TOKEN when repository supplied"
+            exit 11
+          fi
+  build:
+    needs: validate_inputs
+    runs-on: ubuntu-latest
+    outputs:
+      test_results: ${{ steps.build.outputs.test_results }}
+      lint_status: ${{ steps.build.outputs.lint_status }}
+      hashes_match: ${{ steps.build.outputs.hashes_match }}
+    steps:
+      - if: ${{ inputs.repository }}
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ inputs.repository }}
+          token: ${{ secrets.REPO_AUTH_TOKEN }}
+      - if: ${{ !inputs.repository }}
+        uses: actions/checkout@v2
+      - id: build
+        uses: notalexross/cicd-github/actions/build/npm@main
+        with:
+          gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
+          gist_id: ${{ secrets.BADGES_GIST_ID }}
+          env: ${{ secrets.ENV }}
+          build_path: ${{ inputs.build_path }}
+          hash_filename_format: ${{ inputs.hash_filename_format }}
+          force_artifact: ${{ inputs.force_deploy }}
+  deploy:
+    needs: build
+    if: ${{ inputs.force_deploy == true || needs.build.outputs.hashes_match == 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: notalexross/cicd-github/actions/deploy/netlify@main
+        with:
+          netlify_token: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          site_id: ${{ secrets.NETLIFY_SITE_ID }}
+          gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
+          gist_id: ${{ secrets.BADGES_GIST_ID }}
+          artifact_name: build
+          production: ${{ inputs.production }}
+          deploy_message: ${{ inputs.deploy_message }}
+          hash_filename_format: ${{ inputs.hash_filename_format }}
+  update_badges:
+    needs:
+      - validate_inputs
+      - build
+      - deploy
+    if: ${{ always() && needs.validate_inputs.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: notalexross/cicd-github/actions/update-badges@main
+        with:
+          gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
+          gist_id: ${{ secrets.BADGES_GIST_ID }}
+          test_results: ${{ needs.build.outputs.test_results }}
+          lint_status: ${{ needs.build.outputs.lint_status }}
+          build_status: ${{ needs.build.result }}
+          deploy_status: ${{ needs.deploy.result }}
+          filename_format: ${{ inputs.badge_filename_format }}

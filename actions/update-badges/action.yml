@@ -1,0 +1,170 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-action.json
+name: Update badges
+description: Update badges
+inputs:
+  gist_token:
+    description: GitHub personal access token with gist scope
+    required: true
+  gist_id:
+    description: GitHub gist id
+    required: true
+  filename_format:
+    description: Gist filename format, ({N} represents repository ID (N=0), branch name (N=1), or badge name (N=2))
+    required: false
+    default: "{0}__{1}__{2}.json"
+  test_results:
+    description: "JSON containing: coverage (percentage), numTotalTests, numPassedTests, and numFailedTests"
+    required: false
+  lint_status:
+    description: Outcome of lint step, i.e. success, failure, cancelled, or skipped
+    required: false
+  build_status:
+    description: Outcome of build step, i.e. success, failure, cancelled, or skipped
+    required: false
+  deploy_status:
+    description: Outcome of deploy step, i.e. success, failure, cancelled, or skipped
+    required: false
+  colors:
+    description: Badge colors
+    required: false
+    default: red orange yellow yellowgreen green brightgreen
+  min_coverage:
+    description: Minimum coverage, below which the first color defined in "colors" is used for the badge label
+    required: false
+    default: "50"
+  tests_passed_label:
+    description: Passed tests label
+    required: false
+    default: ✔
+  tests_failed_label:
+    description: Failed tests label
+    required: false
+    default: ✗
+  tests_skipped_label:
+    description: Skipped tests label
+    required: false
+    default: ➟
+  tests_label_separator:
+    description: Separator printed between passed, failed, and skipped counts
+    required: false
+    default: " | "
+outputs:
+  coverage_badge:
+    description: Coverage badge
+    value: ${{ steps.coverage_badge.badge }}
+  tests_badge:
+    description: Tests badge
+    value: ${{ steps.tests_badge.badge }}
+  lint_badge:
+    description: Lint badge
+    value: ${{ steps.lint_badge.badge }}
+  build_badge:
+    description: Build badge
+    value: ${{ steps.build_badge.badge }}
+  deploy_badge:
+    description: Deploy badge
+    value: ${{ steps.deploy_badge.badge }}
+runs:
+  using: composite
+  steps:
+    - uses: notalexross/cicd-github/actions/require-inputs@main
+      with:
+        every: >
+          gist_token ${{ toJSON(inputs.gist_token) }}
+          gist_id ${{ toJSON(inputs.gist_id) }}
+          filename_format ${{ toJSON(inputs.filename_format) }}
+          colors ${{ toJSON(inputs.colors) }}
+          min_coverage ${{ toJSON(inputs.min_coverage) }}
+          tests_passed_label ${{ toJSON(inputs.tests_passed_label) }}
+          tests_failed_label ${{ toJSON(inputs.tests_failed_label) }}
+          tests_skipped_label ${{ toJSON(inputs.tests_skipped_label) }}
+          tests_label_separator ${{ toJSON(inputs.tests_label_separator) }}
+    - id: process_coverage
+      if: ${{ always() && inputs.test_results }}
+      shell: bash
+      run: bash ${{ github.action_path }}/process-coverage.sh
+      env:
+        COVERAGE: ${{ inputs.test_results && fromJson(inputs.test_results).coverage }}
+        MIN_COVERAGE: ${{ inputs.min_coverage }}
+        COLORS: ${{ inputs.colors }}
+    - id: coverage_badge
+      if: ${{ always() && steps.process_coverage.outcome == 'success' }}
+      uses: notalexross/cicd-github/actions/update-badge@main
+      with:
+        gist_token: ${{ inputs.gist_token }}
+        gist_id: ${{ inputs.gist_id }}
+        name: coverage
+        label: coverage
+        message: ${{ steps.process_coverage.outputs.message }}
+        color: ${{ steps.process_coverage.outputs.color }}
+        filename_format: ${{ inputs.filename_format }}
+    - id: process_tests
+      if: ${{ always() && inputs.test_results }}
+      shell: bash
+      run: bash ${{ github.action_path }}/process-tests.sh
+      env:
+        NUM_PASSED: ${{ inputs.test_results && fromJson(inputs.test_results).numPassedTests }}
+        NUM_FAILED: ${{ inputs.test_results && fromJson(inputs.test_results).numFailedTests }}
+        NUM_TOTAL: ${{ inputs.test_results && fromJson(inputs.test_results).numTotalTests }}
+        PASSED_LABEL: ${{ inputs.tests_passed_label }}
+        FAILED_LABEL: ${{ inputs.tests_failed_label }}
+        SKIPPED_LABEL: ${{ inputs.tests_skipped_label }}
+        LABEL_SEPARATOR: ${{ inputs.tests_label_separator }}
+        COLORS: ${{ inputs.colors }}
+    - id: tests_badge
+      if: ${{ always() && steps.process_tests.outcome == 'success' }}
+      uses: notalexross/cicd-github/actions/update-badge@main
+      with:
+        gist_token: ${{ inputs.gist_token }}
+        gist_id: ${{ inputs.gist_id }}
+        name: tests
+        label: tests
+        message: ${{ steps.process_tests.outputs.message }}
+        color: ${{ steps.process_tests.outputs.color }}
+        filename_format: ${{ inputs.filename_format }}
+    - id: lint_badge
+      if: ${{ always() && contains(fromJson('["success", "failure"]'), inputs.lint_status) }}
+      uses: notalexross/cicd-github/actions/update-status-badge@main
+      with:
+        gist_token: ${{ inputs.gist_token }}
+        gist_id: ${{ inputs.gist_id }}
+        name: lint
+        label: lint
+        status: ${{ inputs.lint_status }}
+        colors: ${{ inputs.colors }}
+        filename_format: ${{ inputs.filename_format }}
+    - id: build_badge
+      if: ${{ always() && contains(fromJson('["success", "failure"]'), inputs.build_status) }}
+      uses: notalexross/cicd-github/actions/update-status-badge@main
+      with:
+        gist_token: ${{ inputs.gist_token }}
+        gist_id: ${{ inputs.gist_id }}
+        name: build
+        label: build
+        status: ${{ inputs.build_status }}
+        colors: ${{ inputs.colors }}
+        filename_format: ${{ inputs.filename_format }}
+    - id: process_deploy
+      if: ${{ always() && inputs.deploy_status == 'success' }}
+      shell: bash
+      run: bash ${{ github.action_path }}/process-deploy.sh
+    - id: deploy_badge
+      if: ${{ always() && steps.process_deploy.outcome == 'success' }}
+      uses: notalexross/cicd-github/actions/update-badge@main
+      with:
+        gist_token: ${{ inputs.gist_token }}
+        gist_id: ${{ inputs.gist_id }}
+        name: deploy
+        label: last deploy
+        message: ${{ steps.process_deploy.outputs.message }}
+        color: ${{ steps.process_deploy.outputs.color }}
+        filename_format: ${{ inputs.filename_format }}
+    - if: ${{ always() }}
+      shell: bash
+      run: |
+        echo Updated badges:
+        ${{ steps.coverage_badge.outputs.badge && format('echo "{0}"', steps.coverage_badge.outputs.badge) }}
+        ${{ steps.tests_badge.outputs.badge && format('echo "{0}"', steps.tests_badge.outputs.badge) }}
+        ${{ steps.lint_badge.outputs.badge && format('echo "{0}"', steps.lint_badge.outputs.badge) }}
+        ${{ steps.build_badge.outputs.badge && format('echo "{0}"', steps.build_badge.outputs.badge) }}
+        ${{ steps.deploy_badge.outputs.badge && format('echo "{0}"', steps.deploy_badge.outputs.badge) }}

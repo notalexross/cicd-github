@@ -1,0 +1,131 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-action.json
+name: NPM build
+description: Build
+inputs:
+  gist_token:
+    description: GitHub personal access token with gist scope
+    required: true
+  gist_id:
+    description: GitHub gist id
+    required: true
+  env:
+    description: Environment variables
+    required: false
+  build_path:
+    description: Build path
+    required: false
+    default: build
+  hash_filename_format:
+    description: Gist filename format, ({N} represents repository ID (N=0) or branch name (N=1))
+    required: false
+    default: "{0}__{1}__hash.json"
+  force_artifact:
+    description: Boolean string indicating whether to store build files even if the hash is unchanged
+    required: false
+    default: "true"
+outputs:
+  test_results:
+    description: JSON Summary of test results
+    value: ${{ steps.process.outputs.test_results }}
+  lint_status:
+    description: Outcome of lint step, i.e. success, failure, cancelled, or skipped
+    value: ${{ steps.lint.outputs.outcome }}
+  hashes_match:
+    description: Boolean string indicating whether current build hash matches stored value
+    value: ${{ steps.compare.outputs.match }}
+runs:
+  using: composite
+  steps:
+    - uses: notalexross/cicd-github/actions/require-inputs@main
+      with:
+        every: >
+          gist_token ${{ toJSON(inputs.gist_token) }}
+          gist_id ${{ toJSON(inputs.gist_id) }}
+          build_path ${{ toJSON(inputs.build_path) }}
+          hash_filename_format ${{ toJSON(inputs.hash_filename_format) }}
+    - uses: actions/setup-node@v2
+      with:
+        node-version: 16.x
+        cache: npm
+    - id: install
+      shell: bash
+      run: npm ci
+    - id: lint
+      if: ${{ always() && steps.install.outcome == 'success' }}
+      uses: notalexross/cicd-github/actions/run-if-present@main
+      with:
+        script: lint
+        env: ${{ inputs.env }}
+    - id: test
+      if: ${{ always() && steps.install.outcome == 'success' }}
+      uses: notalexross/cicd-github/actions/run-if-present@main
+      with:
+        script: >
+          test --
+          --passWithNoTests
+          --coverage
+          --coverageReporters=json-summary
+          --coverageDirectory=./coverage
+          --json
+          --outputFile ./coverage/test-results.json
+        env: ${{ inputs.env }}
+    - id: parse
+      if: ${{ always() && contains(fromJson('["success", "failure"]'), steps.test.outputs.outcome) }}
+      shell: bash
+      run: |
+        tests_json=$(cat ./coverage/test-results.json)
+        coverage_json=$(cat ./coverage/coverage-summary.json)
+        echo "::set-output name=tests_json::${tests_json//$'\n'/''}"
+        echo "::set-output name=coverage_json::${coverage_json//$'\n'/''}"
+    - id: process
+      if: ${{ always() && steps.parse.outputs.coverage_json && steps.parse.outputs.tests_json }}
+      shell: bash
+      run: |
+        coverage=${{ fromJson(steps.parse.outputs.coverage_json).total.lines.pct }}
+        num_total_tests=${{ fromJson(steps.parse.outputs.tests_json).numTotalTests }}
+        num_passed_tests=${{ fromJson(steps.parse.outputs.tests_json).numPassedTests }}
+        num_failed_tests=${{ fromJson(steps.parse.outputs.tests_json).numFailedTests }}
+        test_results={\"coverage\":\"$coverage\",\"numTotalTests\":\"$num_total_tests\",\"numPassedTests\":\"$num_passed_tests\",\"numFailedTests\":\"$num_failed_tests\"}
+        echo "::set-output name=test_results::$test_results"
+    - id: build
+      uses: notalexross/cicd-github/actions/run-if-present@main
+      with:
+        script: build
+        env: ${{ inputs.env }}
+    - id: get_stored_hash
+      uses: notalexross/cicd-github/actions/gist@main
+      if: ${{ always() && steps.build.outputs.outcome == 'success' }}
+      with:
+        gist_token: ${{ inputs.gist_token }}
+        gist_id: ${{ inputs.gist_id }}
+        method: GET
+        filename: ${{ format(inputs.hash_filename_format, github.event.repository.id, github.ref_name) }}
+    - id: compare
+      if: ${{ always() && steps.build.outputs.outcome == 'success' }}
+      shell: bash
+      run: |
+        hash=${{ hashFiles(inputs.build_path) }}
+        if [[ $hash == "" ]]; then
+          echo "::error::No files present at \"${{ inputs.build_path }}\"."
+          exit 11
+        fi
+        if [[ $hash == "${{ steps.get_stored_hash.outputs.content }}" ]]; then
+          echo "::set-output name=match::true"
+        else
+          echo "::set-output name=match::false"
+        fi
+        echo "::set-output name=hash::$hash"
+    - if: ${{ always() && steps.compare.outcome == 'success' }}
+      shell: bash
+      run: |
+        echo hash: ${{ steps.compare.outputs.hash }}
+        if [[ "${{ steps.compare.outputs.match }}" == true ]]; then
+          echo "Build hash matches stored version."
+        else
+          echo "Build hash is different from stored version (or no stored version found)."
+        fi
+    - if: ${{ inputs.force_artifact == 'true' || steps.compare.outputs.match == 'false' }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: build
+        path: ${{ inputs.build_path }}

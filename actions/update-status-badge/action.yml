@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-action.json
+name: Update status badge
+description: Update status badge
+inputs:
+  gist_token:
+    description: GitHub personal access token with gist scope
+    required: true
+  gist_id:
+    description: GitHub gist id
+    required: true
+  name:
+    description: Badge name
+    required: true
+  label:
+    description: Badge label
+    required: true
+  status:
+    description: Status, i.e. success or failure
+    required: true
+  colors:
+    description: Badge colors
+    required: false
+    default: red brightgreen
+  filename_format:
+    description: Gist filename format, ({N} represents repository ID (N=0), branch name (N=1), or badge name (N=2))
+    required: false
+    default: "{0}__{1}__{2}.json"
+outputs:
+  badge:
+    description: Updated badge
+    value: ${{ steps.status_badge.outputs.badge }}
+runs:
+  using: composite
+  steps:
+    - uses: notalexross/cicd-github/actions/require-inputs@main
+      with:
+        every: >
+          gist_token ${{ toJSON(inputs.gist_token) }}
+          gist_id ${{ toJSON(inputs.gist_id) }}
+          name ${{ toJSON(inputs.name) }}
+          label ${{ toJSON(inputs.label) }}
+          status ${{ toJSON(inputs.status) }}
+          colors ${{ toJSON(inputs.colors) }}
+          filename_format ${{ toJSON(inputs.filename_format) }}
+    - if: ${{ !contains(fromJson('["success", "failure"]'), inputs.status) }}
+      shell: bash
+      run: |
+        echo "::error::status must be one of: success, failure."
+        exit 11
+    - id: process_status
+      shell: bash
+      run: bash ${{ github.action_path }}/process-status.sh
+      env:
+        STATUS: ${{ inputs.status }}
+        COLORS: ${{ inputs.colors }}
+    - id: status_badge
+      uses: notalexross/cicd-github/actions/update-badge@main
+      with:
+        gist_token: ${{ inputs.gist_token }}
+        gist_id: ${{ inputs.gist_id }}
+        name: ${{ inputs.name }}
+        label: ${{ inputs.label }}
+        message: ${{ steps.process_status.outputs.message }}
+        color: ${{ steps.process_status.outputs.color }}
+        filename_format: ${{ inputs.filename_format }}

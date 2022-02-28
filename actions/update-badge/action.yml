@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-action.json
+name: Update badge
+description: Update badge
+inputs:
+  # Note: Quotation marks in label/message must be escaped: \"
+  gist_token:
+    description: GitHub personal access token with gist scope
+    required: true
+  gist_id:
+    description: GitHub gist id
+    required: true
+  name:
+    description: Badge name
+    required: true
+  label:
+    description: Badge label
+    required: true
+  message:
+    description: Badge message
+    required: true
+  color:
+    description: Badge color
+    required: false
+    default: blue
+  filename_format:
+    description: Gist filename format, ({N} represents repository ID (N=0), branch name (N=1), or badge name (N=2))
+    required: false
+    default: "{0}__{1}__{2}.json"
+outputs:
+  badge:
+    description: Updated badge
+    value: ${{ steps.output.outputs.badge }}
+runs:
+  using: composite
+  steps:
+    - uses: notalexross/cicd-github/actions/require-inputs@main
+      with:
+        every: >
+          gist_token ${{ toJSON(inputs.gist_token) }}
+          gist_id ${{ toJSON(inputs.gist_id) }}
+          name ${{ toJSON(inputs.name) }}
+          label ${{ toJSON(inputs.label) }}
+          message ${{ toJSON(inputs.message) }}
+          color ${{ toJSON(inputs.color) }}
+          filename_format ${{ toJSON(inputs.filename_format) }}
+    - uses: notalexross/cicd-github/actions/gist@main
+      with:
+        gist_token: ${{ inputs.gist_token }}
+        gist_id: ${{ inputs.gist_id }}
+        method: POST
+        filename: ${{ format(inputs.filename_format, github.event.repository.id, github.ref_name, inputs.name) }}
+        content: '{"schemaVersion":1,"label":"${{ inputs.label }}","message":"${{ inputs.message }}","color":"${{ inputs.color }}"}'
+    - id: output
+      shell: bash
+      run: echo "::set-output name=badge::${{ format('https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/{0}/{1}/raw/{2}', github.repository_owner, inputs.gist_id, format(inputs.filename_format, github.event.repository.id, github.ref_name, inputs.name)) }}"

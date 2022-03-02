@@ -24,11 +24,11 @@ inputs:
   deploy_message:
     description: Message to include in Netlify deploy log
     required: false
-    default: Via GitHub Actions
-  hash_filename_format:
-    description: Gist filename format, ({N} represents repository ID (N=0) or branch name (N=1))
+    default: Via GitHub
+  hash_filename:
+    description: Hash gist filename
     required: false
-    default: "{0}__{1}__hash.json"
+    default: hash
 runs:
   using: composite
   steps:
@@ -41,7 +41,7 @@ runs:
           gist_id ${{ toJSON(inputs.gist_id) }}
           artifact_name ${{ toJSON(inputs.artifact_name) }}
           production ${{ toJSON(inputs.production) }}
-          hash_filename_format ${{ toJSON(inputs.hash_filename_format) }}
+          hash_filename ${{ toJSON(inputs.hash_filename) }}
     - uses: actions/download-artifact@v2
       with:
         name: ${{ inputs.artifact_name }}
@@ -73,5 +73,5 @@ runs:
         gist_token: ${{ inputs.gist_token }}
         gist_id: ${{ inputs.gist_id }}
         method: POST
-        filename: ${{ format(inputs.hash_filename_format, github.event.repository.id, github.ref_name) }}
+        filename: ${{ inputs.hash_filename }}
         content: ${{ steps.hash.outputs.hash }}

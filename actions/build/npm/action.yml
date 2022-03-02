@@ -15,10 +15,10 @@ inputs:
     description: Build path
     required: false
     default: build
-  hash_filename_format:
-    description: Gist filename format, ({N} represents repository ID (N=0) or branch name (N=1))
+  hash_filename:
+    description: Hash gist filename
     required: false
-    default: "{0}__{1}__hash.json"
+    default: hash
   force_artifact:
     description: Boolean string indicating whether to store build files even if the hash is unchanged
     required: false
@@ -42,7 +42,7 @@ runs:
           gist_token ${{ toJSON(inputs.gist_token) }}
           gist_id ${{ toJSON(inputs.gist_id) }}
           build_path ${{ toJSON(inputs.build_path) }}
-          hash_filename_format ${{ toJSON(inputs.hash_filename_format) }}
+          hash_filename ${{ toJSON(inputs.hash_filename) }}
     - uses: actions/setup-node@v2
       with:
         node-version: 16.x
@@ -99,7 +99,7 @@ runs:
         gist_token: ${{ inputs.gist_token }}
         gist_id: ${{ inputs.gist_id }}
         method: GET
-        filename: ${{ format(inputs.hash_filename_format, github.event.repository.id, github.ref_name) }}
+        filename: ${{ inputs.hash_filename }}
     - id: compare
       if: ${{ always() && steps.build.outputs.outcome == 'success' }}
       shell: bash

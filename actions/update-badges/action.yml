@@ -8,10 +8,10 @@ inputs:
   gist_id:
     description: GitHub gist id
     required: true
-  filename_format:
-    description: Gist filename format, ({N} represents repository ID (N=0), branch name (N=1), or badge name (N=2))
+  filename_template:
+    description: "Gist filename template ({0}: badge name)"
     required: false
-    default: "{0}__{1}__{2}.json"
+    default: badge__{0}.json
   test_results:
     description: "JSON containing: coverage (percentage), numTotalTests, numPassedTests, and numFailedTests"
     required: false
@@ -72,7 +72,7 @@ runs:
         every: >
           gist_token ${{ toJSON(inputs.gist_token) }}
           gist_id ${{ toJSON(inputs.gist_id) }}
-          filename_format ${{ toJSON(inputs.filename_format) }}
+          filename_template ${{ toJSON(inputs.filename_template) }}
           colors ${{ toJSON(inputs.colors) }}
           min_coverage ${{ toJSON(inputs.min_coverage) }}
           tests_passed_label ${{ toJSON(inputs.tests_passed_label) }}
@@ -97,7 +97,7 @@ runs:
         label: coverage
         message: ${{ steps.process_coverage.outputs.message }}
         color: ${{ steps.process_coverage.outputs.color }}
-        filename_format: ${{ inputs.filename_format }}
+        filename_template: ${{ inputs.filename_template }}
     - id: process_tests
       if: ${{ always() && inputs.test_results }}
       shell: bash
@@ -121,7 +121,7 @@ runs:
         label: tests
         message: ${{ steps.process_tests.outputs.message }}
         color: ${{ steps.process_tests.outputs.color }}
-        filename_format: ${{ inputs.filename_format }}
+        filename_template: ${{ inputs.filename_template }}
     - id: lint_badge
       if: ${{ always() && contains(fromJson('["success", "failure"]'), inputs.lint_status) }}
       uses: notalexross/cicd-github/actions/update-status-badge@main
@@ -132,7 +132,7 @@ runs:
         label: lint
         status: ${{ inputs.lint_status }}
         colors: ${{ inputs.colors }}
-        filename_format: ${{ inputs.filename_format }}
+        filename_template: ${{ inputs.filename_template }}
     - id: build_badge
       if: ${{ always() && contains(fromJson('["success", "failure"]'), inputs.build_status) }}
       uses: notalexross/cicd-github/actions/update-status-badge@main
@@ -143,7 +143,7 @@ runs:
         label: build
         status: ${{ inputs.build_status }}
         colors: ${{ inputs.colors }}
-        filename_format: ${{ inputs.filename_format }}
+        filename_template: ${{ inputs.filename_template }}
     - id: process_deploy
       if: ${{ always() && inputs.deploy_status == 'success' }}
       shell: bash
@@ -158,7 +158,7 @@ runs:
         label: last deploy
         message: ${{ steps.process_deploy.outputs.message }}
         color: ${{ steps.process_deploy.outputs.color }}
-        filename_format: ${{ inputs.filename_format }}
+        filename_template: ${{ inputs.filename_template }}
     - if: ${{ always() }}
       shell: bash
       run: |

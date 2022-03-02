@@ -21,10 +21,10 @@ inputs:
     description: Badge colors
     required: false
     default: red brightgreen
-  filename_format:
-    description: Gist filename format, ({N} represents repository ID (N=0), branch name (N=1), or badge name (N=2))
+  filename_template:
+    description: "Gist filename template ({0}: badge name)"
     required: false
-    default: "{0}__{1}__{2}.json"
+    default: badge__{0}.json
 outputs:
   badge:
     description: Updated badge
@@ -41,7 +41,7 @@ runs:
           label ${{ toJSON(inputs.label) }}
           status ${{ toJSON(inputs.status) }}
           colors ${{ toJSON(inputs.colors) }}
-          filename_format ${{ toJSON(inputs.filename_format) }}
+          filename_template ${{ toJSON(inputs.filename_template) }}
     - if: ${{ !contains(fromJson('["success", "failure"]'), inputs.status) }}
       shell: bash
       run: |
@@ -62,4 +62,4 @@ runs:
         label: ${{ inputs.label }}
         message: ${{ steps.process_status.outputs.message }}
         color: ${{ steps.process_status.outputs.color }}
-        filename_format: ${{ inputs.filename_format }}
+        filename_template: ${{ inputs.filename_template }}

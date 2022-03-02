@@ -3,7 +3,7 @@ name: CICD
 on:
   workflow_call:
     inputs:
-      # Note: If repository supplied, default hash_filename_format & badge_filename_format values will still use the calling repo ID and NOT the ID of the checked out repo.
+      # Note: If repository supplied, default hash_filename & badge_filename_template values will still use the calling repo ID and NOT the ID of the checked out repo.
       repository:
         type: string
         required: false
@@ -22,15 +22,15 @@ on:
       deploy_message:
         type: string
         required: false
-        default: Via GitHub Actions
-      hash_filename_format:
+        default: Via GitHub
+      hash_filename:
         type: string
         required: false
-        default: "{0}__{1}__hash.json"
-      badge_filename_format:
+        default: hash
+      badge_filename_template:
         type: string
         required: false
-        default: "{0}__{1}__{2}.json"
+        default: badge__{0}.json
     secrets:
       GIST_AUTH_TOKEN:
         required: true
@@ -52,8 +52,8 @@ jobs:
         with:
           every: >
             build_path ${{ toJSON(inputs.build_path) }}
-            hash_filename_format ${{ toJSON(inputs.hash_filename_format) }}
-            badge_filename_format ${{ toJSON(inputs.badge_filename_format) }}
+            hash_filename ${{ toJSON(inputs.hash_filename) }}
+            badge_filename_template ${{ toJSON(inputs.badge_filename_template) }}
             production ${{ toJSON(inputs.production) }}
             GIST_AUTH_TOKEN ${{ toJSON(secrets.GIST_AUTH_TOKEN) }}
             BADGES_GIST_ID ${{ toJSON(secrets.BADGES_GIST_ID) }}
@@ -86,7 +86,7 @@ jobs:
           gist_id: ${{ secrets.BADGES_GIST_ID }}
           env: ${{ secrets.ENV }}
           build_path: ${{ inputs.build_path }}
-          hash_filename_format: ${{ inputs.hash_filename_format }}
+          hash_filename: ${{ inputs.hash_filename }}
           force_artifact: ${{ inputs.force_deploy }}
   deploy:
     needs: build
@@ -102,7 +102,7 @@ jobs:
           artifact_name: build
           production: ${{ inputs.production }}
           deploy_message: ${{ inputs.deploy_message }}
-          hash_filename_format: ${{ inputs.hash_filename_format }}
+          hash_filename: ${{ inputs.hash_filename }}
   update_badges:
     needs:
       - validate_inputs
@@ -119,4 +119,4 @@ jobs:
           lint_status: ${{ needs.build.outputs.lint_status }}
           build_status: ${{ needs.build.result }}
           deploy_status: ${{ needs.deploy.result }}
-          filename_format: ${{ inputs.badge_filename_format }}
+          filename_template: ${{ inputs.badge_filename_template }}

@@ -7,6 +7,10 @@ on:
       repository:
         type: string
         required: false
+      ref:
+        # Branch, tag, or SHA to checkout
+        type: string
+        required: false
       build_path:
         type: string
         required: false
@@ -20,6 +24,8 @@ on:
         required: false
         default: true
       deploy_message:
+        # {0}: commit_hash
+        # {1}: commit_hash_short
         type: string
         required: false
         default: Via GitHub
@@ -45,8 +51,12 @@ on:
       REPO_AUTH_TOKEN:
         required: false
 jobs:
-  validate_inputs:
+  preprocess:
     runs-on: ubuntu-latest
+    outputs:
+      head_matches_origin: ${{ steps.git.outputs.head_matches_origin }}
+      commit_hash: ${{ steps.git.outputs.commit_hash }}
+      commit_hash_short: ${{ steps.git.outputs.commit_hash_short }}
     steps:
       - uses: notalexross/cicd-github/actions/require-inputs@main
         with:
@@ -59,13 +69,39 @@ jobs:
             BADGES_GIST_ID ${{ toJSON(secrets.BADGES_GIST_ID) }}
             NETLIFY_AUTH_TOKEN ${{ toJSON(secrets.NETLIFY_AUTH_TOKEN) }}
             NETLIFY_SITE_ID ${{ toJSON(secrets.NETLIFY_SITE_ID) }}
-      - run: |
-          if [[ "${{ inputs.repository }}" && "${{ secrets.REPO_AUTH_TOKEN }}" == "" ]]; then
+      - if: ${{ inputs.repository }}
+        run: |
+          if [[ "${{ secrets.REPO_AUTH_TOKEN }}" == "" ]]; then
             echo "::error::Must specify REPO_AUTH_TOKEN when repository supplied"
             exit 11
           fi
+      - if: ${{ inputs.repository }}
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ inputs.repository }}
+          token: ${{ secrets.REPO_AUTH_TOKEN }}
+          ref: ${{ inputs.ref }}
+      - if: ${{ ! inputs.repository }}
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ inputs.ref }}
+      - id: git
+        run: |
+          origin=$(git remote show origin | sed -n -e 's/^  HEAD branch: //p')
+          head=$(git branch | sed -n -e 's/^* //p')
+          commit_hash=$(git log --pretty=format:'%H' -1)
+          echo commit: $commit_hash
+          if [[ $head == $origin ]]; then
+            echo "HEAD matches origin. Current: $head."
+            echo "::set-output name=head_matches_origin::true"
+          else
+            echo "HEAD is different from origin. Current: $head, origin: $origin."
+            echo "::set-output name=head_matches_origin::false"
+          fi
+          echo "::set-output name=commit_hash::$commit_hash"
+          echo "::set-output name=commit_hash_short::${commit_hash::7}"
   build:
-    needs: validate_inputs
+    needs: preprocess
     runs-on: ubuntu-latest
     outputs:
       test_results: ${{ steps.build.outputs.test_results }}
@@ -77,8 +113,11 @@ jobs:
         with:
           repository: ${{ inputs.repository }}
           token: ${{ secrets.REPO_AUTH_TOKEN }}
-      - if: ${{ !inputs.repository }}
+          ref: ${{ inputs.ref }}
+      - if: ${{ ! inputs.repository }}
         uses: actions/checkout@v2
+        with:
+          ref: ${{ inputs.ref }}
       - id: build
         uses: notalexross/cicd-github/actions/build/npm@main
         with:
@@ -89,7 +128,9 @@ jobs:
           hash_filename: ${{ inputs.hash_filename }}
           force_artifact: ${{ inputs.force_deploy }}
   deploy:
-    needs: build
+    needs:
+      - preprocess
+      - build
     if: ${{ inputs.force_deploy == true || needs.build.outputs.hashes_match == 'false' }}
     runs-on: ubuntu-latest
     steps:
@@ -101,17 +142,18 @@ jobs:
           gist_id: ${{ secrets.BADGES_GIST_ID }}
           artifact_name: build
           production: ${{ inputs.production }}
-          deploy_message: ${{ inputs.deploy_message }}
+          deploy_message: ${{ format(inputs.deploy_message, needs.preprocess.outputs.commit_hash, needs.preprocess.outputs.commit_hash_short) }}
           hash_filename: ${{ inputs.hash_filename }}
   update_badges:
     needs:
-      - validate_inputs
+      - preprocess
       - build
       - deploy
-    if: ${{ always() && needs.validate_inputs.result == 'success' }}
+    if: ${{ always() && needs.preprocess.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: notalexross/cicd-github/actions/update-badges@main
+      - if: ${{ needs.preprocess.outputs.head_matches_origin == 'true' }}
+        uses: notalexross/cicd-github/actions/update-badges@main
         with:
           gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
           gist_id: ${{ secrets.BADGES_GIST_ID }}
@@ -119,4 +161,13 @@ jobs:
           lint_status: ${{ needs.build.outputs.lint_status }}
           build_status: ${{ needs.build.result }}
           deploy_status: ${{ needs.deploy.result }}
+          commit_hash: ${{ needs.preprocess.outputs.commit_hash_short }}
+          filename_template: ${{ inputs.badge_filename_template }}
+      - if: ${{ needs.preprocess.outputs.head_matches_origin == 'false' }}
+        uses: notalexross/cicd-github/actions/update-badges@main
+        with:
+          gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
+          gist_id: ${{ secrets.BADGES_GIST_ID }}
+          deploy_status: ${{ needs.deploy.result }}
+          commit_hash: ${{ needs.preprocess.outputs.commit_hash_short }}
           filename_template: ${{ inputs.badge_filename_template }}

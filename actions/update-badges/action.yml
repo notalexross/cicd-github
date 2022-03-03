@@ -24,6 +24,9 @@ inputs:
   deploy_status:
     description: Outcome of deploy step, i.e. success, failure, cancelled, or skipped
     required: false
+  commit_hash:
+    description: Commit hash
+    required: false
   colors:
     description: Badge colors
     required: false
@@ -159,6 +162,16 @@ runs:
         message: ${{ steps.process_deploy.outputs.message }}
         color: ${{ steps.process_deploy.outputs.color }}
         filename_template: ${{ inputs.filename_template }}
+    - id: commit_badge
+      if: ${{ always() && inputs.commit_hash && steps.deploy_badge.outcome == 'success' }}
+      uses: notalexross/cicd-github/actions/update-badge@main
+      with:
+        gist_token: ${{ inputs.gist_token }}
+        gist_id: ${{ inputs.gist_id }}
+        name: commit
+        label: deployed commit
+        message: ${{ inputs.commit_hash }}
+        filename_template: ${{ inputs.filename_template }}
     - if: ${{ always() }}
       shell: bash
       run: |
@@ -168,3 +181,4 @@ runs:
         ${{ steps.lint_badge.outputs.badge && format('echo "{0}"', steps.lint_badge.outputs.badge) }}
         ${{ steps.build_badge.outputs.badge && format('echo "{0}"', steps.build_badge.outputs.badge) }}
         ${{ steps.deploy_badge.outputs.badge && format('echo "{0}"', steps.deploy_badge.outputs.badge) }}
+        ${{ steps.commit_badge.outputs.badge && format('echo "{0}"', steps.commit_badge.outputs.badge) }}

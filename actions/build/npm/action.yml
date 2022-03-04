@@ -49,7 +49,11 @@ runs:
         cache: npm
     - id: install
       shell: bash
-      run: npm ci
+      run: |
+        if ! npm ci; then
+          echo "::warning::\"npm ci\" failed, using \"npm i\" instead."
+          npm i
+        fi
     - id: lint
       if: ${{ always() && steps.install.outcome == 'success' }}
       uses: notalexross/cicd-github/actions/run-if-present@main

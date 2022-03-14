@@ -8,10 +8,10 @@ inputs:
   env:
     description: Environment variables
     required: false
-  warn:
-    description: Boolean string indicating whether to create a warning if script is not present
+  error_level:
+    description: Error level, i.e. off/warn/error
     required: false
-    default: "true"
+    default: warn
 outputs:
   outcome:
     description: Run outcome, i.e. success, failure, cancelled, or skipped
@@ -23,7 +23,12 @@ runs:
       with:
         every: >
           script ${{ toJSON(inputs.script) }}
-          warn ${{ toJSON(inputs.warn) }}
+          error_level ${{ toJSON(inputs.error_level) }}
+    - if: ${{ !contains(fromJson('["off", "warn", "error"]'), inputs.error_level) }}
+      shell: bash
+      run: |
+        echo "::error::error_level must be one of: off, warn, error."
+        exit 11
     - id: get_script_name
       shell: bash
       run: |
@@ -37,8 +42,11 @@ runs:
           echo "::set-output name=present::true"
         else
           echo "::set-output name=present::false"
-          if [[ "${{ inputs.warn }}" == true ]]; then
+          if [[ ${{ inputs.error_level }} == "warn" ]]; then
             echo "::warning::Skipping missing script: \"${{ steps.get_script_name.outputs.name }}\"."
+          elif [[ ${{ inputs.error_level }} == "error" ]]; then
+            echo "::error::Missing script: \"${{ steps.get_script_name.outputs.name }}\"."
+            exit 11
           fi
         fi
     - id: run

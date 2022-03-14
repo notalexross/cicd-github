@@ -15,7 +15,7 @@ if (($# % 2 != 1)); then
 fi
 
 if [[ $method != every && $method != some ]]; then
-  echo "::error::First argument to \"$0\" must either \"every\" or \"some\"."
+  echo "::error::First argument to \"$0\" must be either \"every\" or \"some\"."
   exit 21
 fi
 

@@ -12,8 +12,8 @@ runs:
   using: composite
   steps:
     - shell: bash
-      if: ${{ inputs.some }}
+      if: ${{ !!inputs.some }}
       run: bash ${{ github.action_path }}/enforce.sh some ${{ inputs.some }}
     - shell: bash
-      if: ${{ always() && inputs.every }}
+      if: ${{ always() && !!inputs.every }}
       run: bash ${{ github.action_path }}/enforce.sh every ${{ inputs.every }}

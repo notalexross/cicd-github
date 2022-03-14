@@ -62,6 +62,7 @@ jobs:
         with:
           every: >
             build_path ${{ toJSON(inputs.build_path) }}
+            force_deploy ${{ toJSON(inputs.force_deploy) }}
             hash_filename ${{ toJSON(inputs.hash_filename) }}
             badge_filename_template ${{ toJSON(inputs.badge_filename_template) }}
             production ${{ toJSON(inputs.production) }}
@@ -69,19 +70,19 @@ jobs:
             BADGES_GIST_ID ${{ toJSON(secrets.BADGES_GIST_ID) }}
             NETLIFY_AUTH_TOKEN ${{ toJSON(secrets.NETLIFY_AUTH_TOKEN) }}
             NETLIFY_SITE_ID ${{ toJSON(secrets.NETLIFY_SITE_ID) }}
-      - if: ${{ inputs.repository }}
+      - if: ${{ !!inputs.repository }}
         run: |
           if [[ "${{ secrets.REPO_AUTH_TOKEN }}" == "" ]]; then
             echo "::error::Must specify REPO_AUTH_TOKEN when repository supplied"
             exit 11
           fi
-      - if: ${{ inputs.repository }}
+      - if: ${{ !!inputs.repository }}
         uses: actions/checkout@v2
         with:
           repository: ${{ inputs.repository }}
           token: ${{ secrets.REPO_AUTH_TOKEN }}
           ref: ${{ inputs.ref }}
-      - if: ${{ ! inputs.repository }}
+      - if: ${{ !inputs.repository }}
         uses: actions/checkout@v2
         with:
           ref: ${{ inputs.ref }}
@@ -109,13 +110,13 @@ jobs:
       hash: ${{ steps.compare_hash.outputs.hash }}
       hashes_match: ${{ steps.compare_hash.outputs.match }}
     steps:
-      - if: ${{ inputs.repository }}
+      - if: ${{ !!inputs.repository }}
         uses: actions/checkout@v2
         with:
           repository: ${{ inputs.repository }}
           token: ${{ secrets.REPO_AUTH_TOKEN }}
           ref: ${{ inputs.ref }}
-      - if: ${{ ! inputs.repository }}
+      - if: ${{ !inputs.repository }}
         uses: actions/checkout@v2
         with:
           ref: ${{ inputs.ref }}
@@ -146,7 +147,7 @@ jobs:
             echo "::set-output name=match::false"
           fi
           echo "::set-output name=hash::$hash"
-      - if: ${{ inputs.force_deploy == true || steps.compare_hash.outputs.match == 'false' }}
+      - if: ${{ inputs.force_deploy || steps.compare_hash.outputs.match == 'false' }}
         uses: actions/upload-artifact@v2
         with:
           name: build
@@ -155,7 +156,7 @@ jobs:
     needs:
       - preprocess
       - build
-    if: ${{ inputs.force_deploy == true || needs.build.outputs.hashes_match == 'false' }}
+    if: ${{ inputs.force_deploy || needs.build.outputs.hashes_match == 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v2

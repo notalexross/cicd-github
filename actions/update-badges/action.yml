@@ -83,7 +83,7 @@ runs:
           tests_skipped_label ${{ toJSON(inputs.tests_skipped_label) }}
           tests_label_separator ${{ toJSON(inputs.tests_label_separator) }}
     - id: process_coverage
-      if: ${{ always() && inputs.test_results }}
+      if: ${{ always() && !!inputs.test_results }}
       shell: bash
       run: bash ${{ github.action_path }}/process-coverage.sh
       env:
@@ -102,7 +102,7 @@ runs:
         color: ${{ steps.process_coverage.outputs.color }}
         filename_template: ${{ inputs.filename_template }}
     - id: process_tests
-      if: ${{ always() && inputs.test_results }}
+      if: ${{ always() && !!inputs.test_results }}
       shell: bash
       run: bash ${{ github.action_path }}/process-tests.sh
       env:
@@ -163,7 +163,7 @@ runs:
         color: ${{ steps.process_deploy.outputs.color }}
         filename_template: ${{ inputs.filename_template }}
     - id: commit_badge
-      if: ${{ always() && inputs.commit_hash && steps.deploy_badge.outcome == 'success' }}
+      if: ${{ always() && !!inputs.commit_hash && steps.deploy_badge.outcome == 'success' }}
       uses: notalexross/cicd-github/actions/update-badge@main
       with:
         gist_token: ${{ inputs.gist_token }}

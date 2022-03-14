@@ -15,7 +15,7 @@ inputs:
     description: Badge label
     required: true
   status:
-    description: Status, i.e. success or failure
+    description: Status, i.e. success/failure
     required: true
   colors:
     description: Badge colors

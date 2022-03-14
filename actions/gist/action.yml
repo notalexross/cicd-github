@@ -9,7 +9,7 @@ inputs:
     description: GitHub gist id
     required: true
   method:
-    description: GET/POST
+    description: Method, i.e. GET/POST
     required: true
   filename:
     description: Gist file name
@@ -33,16 +33,16 @@ runs:
           method ${{ toJSON(inputs.method) }}
     - shell: bash
       run: |
-        if [[ "${{ inputs.method }}" != GET && "${{ inputs.method }}" != POST ]]; then
+        if [[ ${{ inputs.method != 'GET' && inputs.method != 'POST' }} == true ]]; then
           echo "::error::method must be one of: GET, POST."
           exit 11
         fi
-        if [[ "${{ inputs.method }}" == POST && ${{ toJSON(inputs.content) }} == "" ]]; then
-          echo "::error::Must specify content when method is \"POST\"."
+        if [[ ${{ inputs.method == 'GET' && !!inputs.content }} == true ]]; then
+          echo "::error::content is incompatible with method \"GET\"."
           exit 11
         fi
-        if [[ "${{ inputs.method }}" == GET && ${{ toJSON(inputs.content) }} ]]; then
-          echo "::error::content is incompatible with method GET."
+        if [[ ${{ inputs.method == 'POST' && !inputs.content }} == true ]]; then
+          echo "::error::Must specify content with method \"POST\"."
           exit 11
         fi
     - id: read

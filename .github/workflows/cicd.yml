@@ -15,6 +15,11 @@ on:
         type: string
         required: false
         default: build
+      host:
+        # netlify/firebase
+        type: string
+        required: false
+        default: netlify
       force_deploy:
         type: boolean
         required: false
@@ -29,6 +34,10 @@ on:
         type: string
         required: false
         default: Via GitHub
+      firebase_deploy_targets:
+        type: string
+        required: false
+        default: hosting
       hash_filename:
         type: string
         required: false
@@ -38,17 +47,21 @@ on:
         required: false
         default: badge__{0}.json
     secrets:
+      REPO_AUTH_TOKEN:
+        required: false
       GIST_AUTH_TOKEN:
         required: true
       BADGES_GIST_ID:
         required: true
       NETLIFY_AUTH_TOKEN:
-        required: true
-      NETLIFY_SITE_ID:
-        required: true
-      ENV:
         required: false
-      REPO_AUTH_TOKEN:
+      NETLIFY_SITE_ID:
+        required: false
+      FIREBASE_AUTH_TOKEN:
+        required: false
+      FIREBASE_PROJECT_ID:
+        required: false
+      ENV:
         required: false
 jobs:
   preprocess:
@@ -62,18 +75,28 @@ jobs:
         with:
           every: >
             build_path ${{ toJSON(inputs.build_path) }}
+            host ${{ toJSON(inputs.host) }}
             force_deploy ${{ toJSON(inputs.force_deploy) }}
+            production ${{ toJSON(inputs.production) }}
             hash_filename ${{ toJSON(inputs.hash_filename) }}
             badge_filename_template ${{ toJSON(inputs.badge_filename_template) }}
-            production ${{ toJSON(inputs.production) }}
             GIST_AUTH_TOKEN ${{ toJSON(secrets.GIST_AUTH_TOKEN) }}
             BADGES_GIST_ID ${{ toJSON(secrets.BADGES_GIST_ID) }}
-            NETLIFY_AUTH_TOKEN ${{ toJSON(secrets.NETLIFY_AUTH_TOKEN) }}
-            NETLIFY_SITE_ID ${{ toJSON(secrets.NETLIFY_SITE_ID) }}
-      - if: ${{ !!inputs.repository }}
-        run: |
-          if [[ "${{ secrets.REPO_AUTH_TOKEN }}" == "" ]]; then
-            echo "::error::Must specify REPO_AUTH_TOKEN when repository supplied"
+      - run: |
+          if [[ ${{ !!inputs.repository && !secrets.REPO_AUTH_TOKEN }} == true ]]; then
+            echo "::error::Must specify REPO_AUTH_TOKEN when repository is specified."
+            exit 11
+          fi
+          if [[ ${{ !contains(fromJson('["netlify", "firebase"]'), inputs.host) }} == true ]]; then
+            echo "::error::host must be one of: netlify, firebase."
+            exit 11
+          fi
+          if [[ ${{ inputs.host == 'netlify' && (!secrets.NETLIFY_AUTH_TOKEN && !secrets.NETLIFY_SITE_ID) }} == true ]]; then
+            echo "::error::Must specify NETLIFY_AUTH_TOKEN and NETLIFY_SITE_ID with host \"netlify\"."
+            exit 11
+          fi
+          if [[ ${{ inputs.host == 'firebase' && (!secrets.FIREBASE_AUTH_TOKEN && !secrets.FIREBASE_PROJECT_ID) }} == true ]]; then
+            echo "::error::Must specify FIREBASE_AUTH_TOKEN and FIREBASE_PROJECT_ID with host \"netlify\"."
             exit 11
           fi
       - if: ${{ !!inputs.repository }}
@@ -159,17 +182,36 @@ jobs:
     if: ${{ inputs.force_deploy || needs.build.outputs.hashes_match == 'false' }}
     runs-on: ubuntu-latest
     steps:
+      - if: ${{ inputs.host == 'firebase' && !!inputs.repository }}
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ inputs.repository }}
+          token: ${{ secrets.REPO_AUTH_TOKEN }}
+          ref: ${{ inputs.ref }}
+      - if: ${{ inputs.host == 'firebase' && !inputs.repository }}
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ inputs.ref }}
       - uses: actions/download-artifact@v2
         with:
           name: build
           path: ${{ inputs.build_path }}
-      - uses: notalexross/cicd-github/actions/deploy/netlify@main
+      - if: ${{ inputs.host == 'netlify' }}
+        uses: notalexross/cicd-github/actions/deploy/netlify@main
         with:
           netlify_token: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           site_id: ${{ secrets.NETLIFY_SITE_ID }}
           build_path: ${{ inputs.build_path }}
           production: ${{ inputs.production }}
           message: ${{ format(inputs.deploy_message, needs.preprocess.outputs.commit_hash, needs.preprocess.outputs.commit_hash_short) }}
+      - if: ${{ inputs.host == 'firebase' }}
+        uses: notalexross/cicd-github/actions/deploy/firebase@main
+        with:
+          firebase_token: ${{ secrets.FIREBASE_AUTH_TOKEN }}
+          project_id: ${{ secrets.FIREBASE_PROJECT_ID }}
+          production: ${{ inputs.production }}
+          message: ${{ format(inputs.deploy_message, needs.preprocess.outputs.commit_hash, needs.preprocess.outputs.commit_hash_short) }}
+          targets: ${{ inputs.firebase_deploy_targets }}
       - uses: notalexross/cicd-github/actions/gist@main
         with:
           gist_token: ${{ secrets.GIST_AUTH_TOKEN }}

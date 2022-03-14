@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-action.json
+name: Firebase deploy
+description: Deploy to Firebase
+inputs:
+  firebase_token:
+    description: Firebase CLI authentication token
+    required: true
+  project_id:
+    description: Firebase project ID
+    required: true
+  production:
+    description: Boolean string indicating whether to deploy to production
+    required: false
+    default: "true"
+  message:
+    description: Message to include in Firebase Hosting release history
+    required: false
+    default: Via GitHub
+  targets:
+    description: Comma separated list of deploy targets, e.g. "hosting,storage"
+    required: false
+    default: hosting
+runs:
+  using: composite
+  steps:
+    - uses: notalexross/cicd-github/actions/require-inputs@main
+      with:
+        every: >
+          firebase_token ${{ toJSON(inputs.firebase_token) }}
+          project_id ${{ toJSON(inputs.project_id) }}
+          production ${{ toJSON(inputs.production) }}
+    - shell: bash
+      run: |
+        npm i -g firebase-tools@10
+        if [[ "${{ inputs.production }}" == true ]]; then
+          firebase deploy \
+            --only "${{ inputs.targets }}" \
+            --message "${{ inputs.message }}" \
+            --token "${{ inputs.firebase_token }}" \
+            --project "${{ inputs.project_id }}" \
+            | perl -pe "s|http(s)?.*?(\h\|$)|***\2|"
+        else
+          firebase hosting:channel:deploy preview-${{ github.run_id }} \
+            --token "${{ inputs.firebase_token }}" \
+            --project "${{ inputs.project_id }}" \
+            | perl -pe "s|http(s)?.*?(\h\|$)|***\2|"
+        fi

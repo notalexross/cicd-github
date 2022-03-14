@@ -8,27 +8,18 @@ inputs:
   site_id:
     description: Site ID
     required: true
-  gist_token:
-    description: GitHub personal access token with gist scope
-    required: true
-  gist_id:
-    description: GitHub gist id
-    required: true
-  artifact_name:
-    description: Name of artifact containing the build files for deployment
-    required: true
+  build_path:
+    description: Build path
+    required: false
+    default: build
   production:
     description: Boolean string indicating whether to deploy to production
     required: false
     default: "true"
-  deploy_message:
+  message:
     description: Message to include in Netlify deploy log
     required: false
     default: Via GitHub
-  hash_filename:
-    description: Hash gist filename
-    required: false
-    default: hash
 runs:
   using: composite
   steps:
@@ -37,41 +28,17 @@ runs:
         every: >
           netlify_token ${{ toJSON(inputs.netlify_token) }}
           site_id ${{ toJSON(inputs.site_id) }}
-          gist_token ${{ toJSON(inputs.gist_token) }}
-          gist_id ${{ toJSON(inputs.gist_id) }}
-          artifact_name ${{ toJSON(inputs.artifact_name) }}
+          build_path ${{ toJSON(inputs.build_path) }}
           production ${{ toJSON(inputs.production) }}
-          hash_filename ${{ toJSON(inputs.hash_filename) }}
-    - uses: actions/download-artifact@v2
-      with:
-        name: ${{ inputs.artifact_name }}
-        path: ./artifacts/build
-    - id: hash
-      shell: bash
-      run: |
-        hash=${{ hashFiles('./artifacts/build') }}
-        if [[ $hash == "" ]]; then
-          echo "::error::Artifact named \"${{ inputs.artifact_name }}\" does not exist."
-          exit 11
-        fi
-        echo "::set-output name=hash::$hash"
-    - id: deploy
-      shell: bash
+    - shell: bash
       run: |
         npm i -g netlify-cli@9
         netlify deploy \
-        --dir=./artifacts/build \
-        --message="${{ inputs.deploy_message }}" \
-        --timeout 600 \
-        $([[ "${{ inputs.production }}" == true ]] && echo --prod) \
-        > /dev/null
+          --dir "${{ inputs.build_path }}" \
+          --message "${{ inputs.message }}" \
+          --timeout 600 \
+          $([[ "${{ inputs.production }}" == true ]] && echo --prod) \
+          | perl -pe "s|http(s)?.*?(\h\|$)|***\2|"
       env:
         NETLIFY_SITE_ID: ${{ inputs.site_id }}
         NETLIFY_AUTH_TOKEN: ${{ inputs.netlify_token }}
-    - uses: notalexross/cicd-github/actions/gist@main
-      with:
-        gist_token: ${{ inputs.gist_token }}
-        gist_id: ${{ inputs.gist_id }}
-        method: POST
-        filename: ${{ inputs.hash_filename }}
-        content: ${{ steps.hash.outputs.hash }}

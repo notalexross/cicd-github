@@ -106,7 +106,8 @@ jobs:
     outputs:
       test_results: ${{ steps.build.outputs.test_results }}
       lint_status: ${{ steps.build.outputs.lint_status }}
-      hashes_match: ${{ steps.build.outputs.hashes_match }}
+      hash: ${{ steps.compare_hash.outputs.hash }}
+      hashes_match: ${{ steps.compare_hash.outputs.match }}
     steps:
       - if: ${{ inputs.repository }}
         uses: actions/checkout@v2
@@ -121,12 +122,35 @@ jobs:
       - id: build
         uses: notalexross/cicd-github/actions/build/npm@main
         with:
+          env: ${{ secrets.ENV }}
+      - id: get_stored_hash
+        uses: notalexross/cicd-github/actions/gist@main
+        with:
           gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
           gist_id: ${{ secrets.BADGES_GIST_ID }}
-          env: ${{ secrets.ENV }}
-          build_path: ${{ inputs.build_path }}
-          hash_filename: ${{ inputs.hash_filename }}
-          force_artifact: ${{ inputs.force_deploy }}
+          method: GET
+          filename: ${{ inputs.hash_filename }}
+      - id: compare_hash
+        shell: bash
+        run: |
+          hash=${{ hashFiles(inputs.build_path) }}
+          if [[ $hash == "" ]]; then
+            echo "::error::No files present at \"${{ inputs.build_path }}\"."
+            exit 11
+          fi
+          if [[ $hash == "${{ steps.get_stored_hash.outputs.content }}" ]]; then
+            echo "Build hash matches stored version."
+            echo "::set-output name=match::true"
+          else
+            echo "Build hash is different from stored version (or no stored version found)."
+            echo "::set-output name=match::false"
+          fi
+          echo "::set-output name=hash::$hash"
+      - if: ${{ inputs.force_deploy == true || steps.compare_hash.outputs.match == 'false' }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: build
+          path: ${{ inputs.build_path }}
   deploy:
     needs:
       - preprocess
@@ -134,16 +158,24 @@ jobs:
     if: ${{ inputs.force_deploy == true || needs.build.outputs.hashes_match == 'false' }}
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: build
+          path: ${{ inputs.build_path }}
       - uses: notalexross/cicd-github/actions/deploy/netlify@main
         with:
           netlify_token: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           site_id: ${{ secrets.NETLIFY_SITE_ID }}
+          build_path: ${{ inputs.build_path }}
+          production: ${{ inputs.production }}
+          message: ${{ format(inputs.deploy_message, needs.preprocess.outputs.commit_hash, needs.preprocess.outputs.commit_hash_short) }}
+      - uses: notalexross/cicd-github/actions/gist@main
+        with:
           gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
           gist_id: ${{ secrets.BADGES_GIST_ID }}
-          artifact_name: build
-          production: ${{ inputs.production }}
-          deploy_message: ${{ format(inputs.deploy_message, needs.preprocess.outputs.commit_hash, needs.preprocess.outputs.commit_hash_short) }}
-          hash_filename: ${{ inputs.hash_filename }}
+          method: POST
+          filename: ${{ inputs.hash_filename }}
+          content: ${{ needs.build.outputs.hash }}
   update_badges:
     needs:
       - preprocess

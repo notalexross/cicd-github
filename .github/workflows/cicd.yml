@@ -170,7 +170,7 @@ jobs:
             echo "::set-output name=match::false"
           fi
           echo "::set-output name=hash::$hash"
-      - if: ${{ inputs.force_deploy || steps.compare_hash.outputs.match == 'false' }}
+      - if: ${{ inputs.force_deploy || !inputs.production || steps.compare_hash.outputs.match == 'false' }}
         uses: actions/upload-artifact@v2
         with:
           name: build
@@ -179,7 +179,7 @@ jobs:
     needs:
       - preprocess
       - build
-    if: ${{ inputs.force_deploy || needs.build.outputs.hashes_match == 'false' }}
+    if: ${{ inputs.force_deploy || !inputs.production || needs.build.outputs.hashes_match == 'false' }}
     runs-on: ubuntu-latest
     steps:
       - if: ${{ inputs.host == 'firebase' && !!inputs.repository }}
@@ -212,7 +212,8 @@ jobs:
           production: ${{ inputs.production }}
           message: ${{ format(inputs.deploy_message, needs.preprocess.outputs.commit_hash, needs.preprocess.outputs.commit_hash_short) }}
           targets: ${{ inputs.firebase_deploy_targets }}
-      - uses: notalexross/cicd-github/actions/gist@main
+      - if: ${{ inputs.production }}
+        uses: notalexross/cicd-github/actions/gist@main
         with:
           gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
           gist_id: ${{ secrets.BADGES_GIST_ID }}
@@ -227,7 +228,7 @@ jobs:
     if: ${{ always() && needs.preprocess.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - if: ${{ needs.preprocess.outputs.head_matches_origin == 'true' }}
+      - if: ${{ inputs.production && needs.preprocess.outputs.head_matches_origin == 'true' }}
         uses: notalexross/cicd-github/actions/update-badges@main
         with:
           gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
@@ -238,11 +239,20 @@ jobs:
           deploy_status: ${{ needs.deploy.result }}
           commit_hash: ${{ needs.preprocess.outputs.commit_hash_short }}
           filename_template: ${{ inputs.badge_filename_template }}
-      - if: ${{ needs.preprocess.outputs.head_matches_origin == 'false' }}
+      - if: ${{ inputs.production && needs.preprocess.outputs.head_matches_origin == 'false' }}
         uses: notalexross/cicd-github/actions/update-badges@main
         with:
           gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
           gist_id: ${{ secrets.BADGES_GIST_ID }}
           deploy_status: ${{ needs.deploy.result }}
           commit_hash: ${{ needs.preprocess.outputs.commit_hash_short }}
+          filename_template: ${{ inputs.badge_filename_template }}
+      - if: ${{ !inputs.production && needs.preprocess.outputs.head_matches_origin == 'true' }}
+        uses: notalexross/cicd-github/actions/update-badges@main
+        with:
+          gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
+          gist_id: ${{ secrets.BADGES_GIST_ID }}
+          test_results: ${{ needs.build.outputs.test_results }}
+          lint_status: ${{ needs.build.outputs.lint_status }}
+          build_status: ${{ needs.build.result }}
           filename_template: ${{ inputs.badge_filename_template }}

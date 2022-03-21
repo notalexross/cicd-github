@@ -50,9 +50,9 @@ on:
       REPO_AUTH_TOKEN:
         required: false
       GIST_AUTH_TOKEN:
-        required: true
+        required: false
       BADGES_GIST_ID:
-        required: true
+        required: false
       NETLIFY_AUTH_TOKEN:
         required: false
       NETLIFY_SITE_ID:
@@ -67,6 +67,7 @@ jobs:
   preprocess:
     runs-on: ubuntu-latest
     outputs:
+      has_gist_id: ${{ !!secrets.BADGES_GIST_ID }}
       head_matches_origin: ${{ steps.git.outputs.head_matches_origin }}
       commit_hash: ${{ steps.git.outputs.commit_hash }}
       commit_hash_short: ${{ steps.git.outputs.commit_hash_short }}
@@ -80,8 +81,6 @@ jobs:
             production ${{ toJSON(inputs.production) }}
             hash_filename ${{ toJSON(inputs.hash_filename) }}
             badge_filename_template ${{ toJSON(inputs.badge_filename_template) }}
-            GIST_AUTH_TOKEN ${{ toJSON(secrets.GIST_AUTH_TOKEN) }}
-            BADGES_GIST_ID ${{ toJSON(secrets.BADGES_GIST_ID) }}
       - run: |
           if [[ ${{ !!inputs.repository && !secrets.REPO_AUTH_TOKEN }} == true ]]; then
             echo "::error::Must specify REPO_AUTH_TOKEN when repository is specified."
@@ -97,6 +96,10 @@ jobs:
           fi
           if [[ ${{ inputs.host == 'firebase' && (!secrets.FIREBASE_AUTH_TOKEN && !secrets.FIREBASE_PROJECT_ID) }} == true ]]; then
             echo "::error::Must specify FIREBASE_AUTH_TOKEN and FIREBASE_PROJECT_ID with host \"netlify\"."
+            exit 11
+          fi
+          if [[ ${{ !!secrets.BADGES_GIST_ID && !secrets.GIST_AUTH_TOKEN }} == true ]]; then
+            echo "::error::Must specify GIST_AUTH_TOKEN when BADGES_GIST_ID is specified."
             exit 11
           fi
       - if: ${{ !!inputs.repository }}
@@ -147,14 +150,16 @@ jobs:
         uses: notalexross/cicd-github/actions/build/npm@main
         with:
           env: ${{ secrets.ENV }}
-      - id: get_stored_hash
+      - if: ${{ needs.preprocess.outputs.has_gist_id == 'true' }}
+        id: get_stored_hash
         uses: notalexross/cicd-github/actions/gist@main
         with:
           gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
           gist_id: ${{ secrets.BADGES_GIST_ID }}
           method: GET
           filename: ${{ inputs.hash_filename }}
-      - id: compare_hash
+      - if: ${{ needs.preprocess.outputs.has_gist_id == 'true' }}
+        id: compare_hash
         shell: bash
         run: |
           hash=${{ hashFiles(inputs.build_path) }}
@@ -170,7 +175,7 @@ jobs:
             echo "::set-output name=match::false"
           fi
           echo "::set-output name=hash::$hash"
-      - if: ${{ inputs.force_deploy || !inputs.production || steps.compare_hash.outputs.match == 'false' }}
+      - if: ${{ inputs.force_deploy || !inputs.production || steps.compare_hash.outputs.match != 'true' }}
         uses: actions/upload-artifact@v2
         with:
           name: build
@@ -179,7 +184,7 @@ jobs:
     needs:
       - preprocess
       - build
-    if: ${{ inputs.force_deploy || !inputs.production || needs.build.outputs.hashes_match == 'false' }}
+    if: ${{ inputs.force_deploy || !inputs.production || needs.build.outputs.hashes_match != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - if: ${{ inputs.host == 'firebase' && !!inputs.repository }}
@@ -212,7 +217,7 @@ jobs:
           production: ${{ inputs.production }}
           message: ${{ format(inputs.deploy_message, needs.preprocess.outputs.commit_hash, needs.preprocess.outputs.commit_hash_short) }}
           targets: ${{ inputs.firebase_deploy_targets }}
-      - if: ${{ inputs.production }}
+      - if: ${{ needs.preprocess.outputs.has_gist_id == 'true' && inputs.production }}
         uses: notalexross/cicd-github/actions/gist@main
         with:
           gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
@@ -225,7 +230,7 @@ jobs:
       - preprocess
       - build
       - deploy
-    if: ${{ always() && needs.preprocess.result == 'success' }}
+    if: ${{ always() && needs.preprocess.outputs.has_gist_id == 'true' && needs.preprocess.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - if: ${{ inputs.production && needs.preprocess.outputs.head_matches_origin == 'true' }}

@@ -51,7 +51,7 @@ on:
         required: false
       GIST_AUTH_TOKEN:
         required: false
-      BADGES_GIST_ID:
+      GIST_ID:
         required: false
       NETLIFY_AUTH_TOKEN:
         required: false
@@ -67,7 +67,7 @@ jobs:
   preprocess:
     runs-on: ubuntu-latest
     outputs:
-      has_gist_id: ${{ !!secrets.BADGES_GIST_ID }}
+      has_gist_id: ${{ !!secrets.GIST_ID }}
       head_matches_origin: ${{ steps.git.outputs.head_matches_origin }}
       commit_hash: ${{ steps.git.outputs.commit_hash }}
       commit_hash_short: ${{ steps.git.outputs.commit_hash_short }}
@@ -98,8 +98,8 @@ jobs:
             echo "::error::Must specify FIREBASE_AUTH_TOKEN and FIREBASE_PROJECT_ID with host \"netlify\"."
             exit 11
           fi
-          if [[ ${{ !!secrets.BADGES_GIST_ID && !secrets.GIST_AUTH_TOKEN }} == true ]]; then
-            echo "::error::Must specify GIST_AUTH_TOKEN when BADGES_GIST_ID is specified."
+          if [[ ${{ !!secrets.GIST_ID && !secrets.GIST_AUTH_TOKEN }} == true ]]; then
+            echo "::error::Must specify GIST_AUTH_TOKEN when GIST_ID is specified."
             exit 11
           fi
       - if: ${{ !!inputs.repository }}
@@ -155,7 +155,7 @@ jobs:
         uses: notalexross/cicd-github/actions/gist@main
         with:
           gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
-          gist_id: ${{ secrets.BADGES_GIST_ID }}
+          gist_id: ${{ secrets.GIST_ID }}
           method: GET
           filename: ${{ inputs.hash_filename }}
       - if: ${{ needs.preprocess.outputs.has_gist_id == 'true' }}
@@ -221,7 +221,7 @@ jobs:
         uses: notalexross/cicd-github/actions/gist@main
         with:
           gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
-          gist_id: ${{ secrets.BADGES_GIST_ID }}
+          gist_id: ${{ secrets.GIST_ID }}
           method: POST
           filename: ${{ inputs.hash_filename }}
           content: ${{ needs.build.outputs.hash }}
@@ -237,7 +237,7 @@ jobs:
         uses: notalexross/cicd-github/actions/update-badges@main
         with:
           gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
-          gist_id: ${{ secrets.BADGES_GIST_ID }}
+          gist_id: ${{ secrets.GIST_ID }}
           test_results: ${{ needs.build.outputs.test_results }}
           lint_status: ${{ needs.build.outputs.lint_status }}
           build_status: ${{ needs.build.result }}
@@ -248,7 +248,7 @@ jobs:
         uses: notalexross/cicd-github/actions/update-badges@main
         with:
           gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
-          gist_id: ${{ secrets.BADGES_GIST_ID }}
+          gist_id: ${{ secrets.GIST_ID }}
           deploy_status: ${{ needs.deploy.result }}
           commit_hash: ${{ needs.preprocess.outputs.commit_hash_short }}
           filename_template: ${{ inputs.badge_filename_template }}
@@ -256,7 +256,7 @@ jobs:
         uses: notalexross/cicd-github/actions/update-badges@main
         with:
           gist_token: ${{ secrets.GIST_AUTH_TOKEN }}
-          gist_id: ${{ secrets.BADGES_GIST_ID }}
+          gist_id: ${{ secrets.GIST_ID }}
           test_results: ${{ needs.build.outputs.test_results }}
           lint_status: ${{ needs.build.outputs.lint_status }}
           build_status: ${{ needs.build.result }}

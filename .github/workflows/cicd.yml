@@ -11,6 +11,10 @@ on:
         # Branch, tag, or SHA to checkout
         type: string
         required: false
+      node_version:
+        type: string
+        required: false
+        default: "24"
       build_path:
         type: string
         required: false
@@ -75,6 +79,7 @@ jobs:
       - uses: notalexross/cicd-github/actions/require-inputs@main
         with:
           every: >
+            node_version ${{ toJSON(inputs.node_version) }}
             build_path ${{ toJSON(inputs.build_path) }}
             host ${{ toJSON(inputs.host) }}
             force_deploy ${{ toJSON(inputs.force_deploy) }}
@@ -150,6 +155,7 @@ jobs:
         uses: notalexross/cicd-github/actions/build/npm@main
         with:
           env: ${{ secrets.ENV }}
+          node_version: ${{ inputs.node_version }}
       - if: ${{ needs.preprocess.outputs.has_gist_id == 'true' }}
         id: get_stored_hash
         uses: notalexross/cicd-github/actions/gist@main

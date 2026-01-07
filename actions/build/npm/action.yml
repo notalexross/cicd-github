@@ -5,6 +5,10 @@ inputs:
   env:
     description: Environment variables
     required: false
+  node_version:
+    description: Node version
+    required: false
+    default: "24"
 outputs:
   test_results:
     description: JSON Summary of test results
@@ -17,7 +21,7 @@ runs:
   steps:
     - uses: actions/setup-node@v6
       with:
-        node-version: 24.x
+        node-version: ${{ inputs.node_version }}
         cache: npm
     - id: install
       shell: bash

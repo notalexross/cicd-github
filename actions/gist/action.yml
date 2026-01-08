@@ -63,7 +63,7 @@ runs:
       run: |
         content=${{ toJSON(inputs.content) }}
         echo $content > .gist/${{ inputs.filename }}
-        gh gist edit ${{ inputs.gist_id }} -a .gist/${{ inputs.filename }}
+        bash ${{ github.action_path }}/retry.sh --max-attempts 10 gh gist edit ${{ inputs.gist_id }} -a .gist/${{ inputs.filename }}
         echo "::set-output name=content::$content"
       env:
         GITHUB_TOKEN: ${{ inputs.gist_token }}

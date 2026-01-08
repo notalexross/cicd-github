@@ -8,7 +8,7 @@ inputs:
   node_version:
     description: Node version
     required: false
-    default: "24"
+    default: latest
 outputs:
   test_results:
     description: JSON Summary of test results
@@ -22,6 +22,7 @@ runs:
     - uses: actions/setup-node@v6
       with:
         node-version: ${{ inputs.node_version }}
+        check-latest: true
         cache: npm
     - id: install
       shell: bash
